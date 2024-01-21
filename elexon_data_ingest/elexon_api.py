@@ -1,10 +1,11 @@
 """ Contains a class to retrieve data from the Elexon API """
 
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Any, Union
 
 import pandas as pd
 import requests
+from requests.auth import HTTPBasicAuth
 
 
 class DataStrategy(ABC):
@@ -13,7 +14,7 @@ class DataStrategy(ABC):
     """
 
     @abstractmethod
-    def process_data(self, data: dict) -> dict:
+    def process_data(self, data: dict) -> pd.DataFrame:
         """
         Processes the data according to the specific strategy.
 
@@ -40,7 +41,7 @@ class TemperatureStrategy(DataStrategy):
     Data processing strategy for temperature data.
     """
 
-    def process_data(self, data: dict) -> dict:
+    def process_data(self, data: dict) -> pd.DataFrame:
         """
         Processes temperature data.
 
@@ -50,14 +51,18 @@ class TemperatureStrategy(DataStrategy):
         Returns:
             - dict: The processed temperature data.
         """
-        timestamp = data.get("timestamp")
-        return {
-            "timestamp": pd.to_datetime(timestamp),
-            "temperature": data.get("temperature"),
-            "temperatureReferenceAverage": data.get(
-                "temperatureReferenceAverage"
-            ),
-        }
+        extracted_data: list[dict[str, Any]] = [
+            {
+                "temperature": entry["temperature"],
+                "temperatureReferenceAverage": entry[
+                    "temperatureReferenceAverage"
+                ],
+                "timestamp": pd.to_datetime(entry["measurementDate"]).date(),
+            }
+            for entry in data["data"]
+        ]
+
+        return pd.DataFrame(extracted_data)
 
     def get_strategy_info(self) -> str:
         """
@@ -77,7 +82,7 @@ class GenerationStrategy(DataStrategy):
         - process_data(data: dict) -> dict: Processes generation data.
     """
 
-    def process_data(self, data: dict) -> dict:
+    def process_data(self, data: dict) -> pd.DataFrame:
         """
         Processes generation data.
 
@@ -87,16 +92,17 @@ class GenerationStrategy(DataStrategy):
         Returns:
             - dict: The processed generation data.
         """
-        timestamp = data.get("timestamp")
-        types_data = data.get("data", [])
-        return [
+        extracted_data: list[dict[str, Any]] = [
             {
-                "timestamp": pd.to_datetime(timestamp),
-                "type": entry["type"],
-                "quantity": entry.get("quantity"),
+                "timestamp": pd.to_datetime(entry["startTime"]),
+                "psrType": subentry["psrType"],
+                "quantity": subentry["quantity"],
             }
-            for entry in types_data
+            for entry in data["data"]
+            for subentry in entry["data"]
         ]
+
+        return pd.DataFrame(extracted_data)
 
     def get_strategy_info(self) -> str:
         """
@@ -116,7 +122,7 @@ class DemandStrategy(DataStrategy):
         - process_data(data: dict) -> dict: Processes demand data.
     """
 
-    def process_data(self, data: dict) -> dict:
+    def process_data(self, data: dict) -> pd.DataFrame:
         """
         Processes demand data.
 
@@ -126,11 +132,15 @@ class DemandStrategy(DataStrategy):
         Returns:
             - dict: The processed demand data.
         """
-        timestamp = data.get("timestamp")
-        return {
-            "timestamp": pd.to_datetime(timestamp),
-            "initialDemandOutturn": data.get("initialDemandOutturn"),
-        }
+        extracted_data: list[dict[str, Any]] = [
+            {
+                "timestamp": pd.to_datetime(entry["startTime"]),
+                "initialDemandOutturn": entry.get("initialDemandOutturn"),
+            }
+            for entry in data["data"]
+        ]
+
+        return pd.DataFrame(extracted_data)
 
     def get_strategy_info(self) -> str:
         """
@@ -148,9 +158,14 @@ class ElexonAPI:
     """
 
     def __init__(
-        self, start_date: str, end_date: str, data_format: str = "json"
+        self,
+        auth: str,
+        start_date: str,
+        end_date: str,
+        data_format: str = "json",
     ):
-        self.base_url = "https://bmrs.elexon.co.uk/api/v1/"
+        self.base_url = "https://data.elexon.co.uk/bmrs/api/v1/"
+        self.auth = HTTPBasicAuth("apikey", auth)
         self.start_date = start_date
         self.end_date = end_date
         self.format = data_format
@@ -169,24 +184,28 @@ class ElexonAPI:
             - Union[pd.DataFrame, None]: If successful, returns the processed data as a DataFrame.
                                         If unsuccessful, returns None.
         """
-        url_params = {
+        url_params: dict[str, str] = {
             "from": self.start_date,
             "to": self.end_date,
             "format": self.format,
         }
 
+        if endpoint == "demand/outturn":
+            url_params["settlementDateFrom"] = url_params.pop("from")
+            url_params["settlementDateTo"] = url_params.pop("to")
+
         try:
-            response = requests.get(
-                f"{self.base_url}{endpoint}", params=url_params, timeout=5
+            response: requests.Response = requests.get(
+                f"{self.base_url}{endpoint}",
+                params=url_params,
+                timeout=5,
+                auth=self.auth,
             )
             response.raise_for_status()
-            data = response.json()
-            processed_data = strategy.process_data(data)
+            data: Any = response.json()
+            processed_data: pd.DataFrame = strategy.process_data(data)
 
-            if isinstance(processed_data, list):
-                return pd.DataFrame(processed_data)
-
-            return pd.DataFrame([processed_data])
+            return processed_data
         except requests.exceptions.RequestException as e:
             print(f"Error fetching data: {e}")
             return None
@@ -203,4 +222,4 @@ class ElexonAPI:
 
     def get_demand_data(self) -> Union[pd.DataFrame, None]:
         """Fetches demand data."""
-        return self.fetch_data("demand", DemandStrategy())
+        return self.fetch_data("demand/outturn", DemandStrategy())
