@@ -1,12 +1,11 @@
 """ Ingests data from the Elexon API """
 
 import argparse
-from pprint import pprint
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from elexon_data_ingest.elexon_api import ElexonAPI
+from elexon_data_ingest.elexon_api import ElexonAPI, logger
 
 
 def ingest_elexon_data() -> None:
@@ -63,18 +62,19 @@ def ingest_elexon_data() -> None:
 
     merged_data: pd.DataFrame = pd.merge(
         merged_data, demand_data, on="timestamp", how="outer"
-    )
+    ).dropna()
     merged_data.set_index("timestamp", inplace=True)
 
-    print("Consolidated Data:")
-    print(merged_data.head(50))
+    logger.info("Consolidated data:\n%s\n", merged_data)
 
     engine = create_engine("sqlite://", echo=False)
 
     merged_data.to_sql("elexon", con=engine)
 
     with engine.connect() as conn:
-        pprint(conn.execute(text("""SELECT * FROM elexon""")).fetchall())
+        logger.info(
+            conn.execute(text("""SELECT * FROM elexon LIMIT 15""")).fetchall()
+        )
 
 
 if __name__ == "__main__":

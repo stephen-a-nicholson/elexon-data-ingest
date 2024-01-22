@@ -1,11 +1,18 @@
 """ Contains a class to retrieve data from the Elexon API """
-
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, Union
 
 import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+file_handler = logging.FileHandler("elexon.log")
+file_handler.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
 
 
 class DataStrategy(ABC):
@@ -62,7 +69,10 @@ class TemperatureStrategy(DataStrategy):
             for entry in data["data"]
         ]
 
-        return pd.DataFrame(extracted_data)
+        temperature_df: pd.DataFrame = pd.DataFrame(extracted_data)
+        logger.info("Temperature data:\n%s\n", temperature_df)
+
+        return temperature_df
 
     def get_strategy_info(self) -> str:
         """
@@ -102,7 +112,10 @@ class GenerationStrategy(DataStrategy):
             for subentry in entry["data"]
         ]
 
-        return pd.DataFrame(extracted_data)
+        generation_df: pd.DataFrame = pd.DataFrame(extracted_data)
+        logger.info("Generation data:\n%s\n", generation_df)
+
+        return generation_df
 
     def get_strategy_info(self) -> str:
         """
@@ -140,7 +153,10 @@ class DemandStrategy(DataStrategy):
             for entry in data["data"]
         ]
 
-        return pd.DataFrame(extracted_data)
+        demand_df: pd.DataFrame = pd.DataFrame(extracted_data)
+        logger.info("Demand data:\n%s\n", demand_df)
+
+        return demand_df
 
     def get_strategy_info(self) -> str:
         """
@@ -207,7 +223,7 @@ class ElexonAPI:
 
             return processed_data
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching data: {e}")
+            logger.info("Error fetching data: %s", e)
             return None
 
     def get_temperature_data(self) -> Union[pd.DataFrame, None]:
