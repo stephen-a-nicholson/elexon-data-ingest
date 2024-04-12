@@ -1,24 +1,59 @@
-# elexon-data-ingest
+# Elexon Data Ingestion
 
-This Python application extracts data from the Elexon API using the requests library to interact with specific endpoints, each catering to different datasets such as temperature, generation, and demand. Employing the strategy pattern allows for the encapsulation of algorithms related to each endpoint, enabling seamless switching between them. This modular design facilitates extensibility, making it easier to incorporate new endpoints in the future without disrupting the existing codebase.
+This project ingests data from the Elexon API, processes it, and stores it in a SQLite database. The data includes temperature, generation, and demand data. The project utilises the Strategy pattern to handle different data processing strategies for each API endpoint.
 
-Settlement periods represent discrete time intervals during which energy consumption and generation data are recorded. In the context of Elexon's data, settlement periods are typically 30 minutes long, and their aggregation provides insights into the energy landscape. Understanding settlement periods is vital for analysing and modelling energy-related phenomena, as these periods influence pricing, demand forecasting, and overall grid management.
+## Prerequisites
 
-# Project Requirements and Usage Guide
+- Python 3.7 or higher
+- Poetry (Python dependency management tool)
 
-## Requirements
+## Installation
 
-- **Python:** The project requires either Python 3.10 or Python 3.11. Ensure that you have Python installed on your system.
+1. Clone the repository:
 
-- **Poetry:** Make sure Poetry is installed. If not, you can install it using the following command:
-  ```bash
-  python -m pip install --upgrade poetry
+   ```bash
+   git clone https://github.com/stephen-a-nicholson/elexon-data-ingest.git
+   cd elexon-data-ingest
+   ```
 
-  cd <project_directory>
+2. Install the dependencies using Poetry:
 
-  poetry install
+   ```bash
+   poetry install
+   ```
 
-  poetry shell
+## Usage
 
-  usage: ingest_data.py [-h] --from FROM_DATE --to TO_DATE --key API_KEY
-  ```
+1. Activate the virtual environment created by Poetry:
+
+   ```bash
+   poetry shell
+   ```
+
+2. Run the data ingestion script with the required command-line arguments:
+
+   ```bash
+   python ingest_data.py --from START_DATE --to END_DATE --key API_KEY
+   ```
+
+   Replace `START_DATE` and `END_DATE` with the desired date range in the format `YYYY-MM-DD`, and `API_KEY` with your Elexon API key.
+
+   Example:
+   ```bash
+   python ingest_data.py --from 2023-01-01 --to 2023-01-31 --key your_api_key
+   ```
+
+3. The script will fetch the data from the Elexon API, process it using the appropriate strategy for each endpoint, and store it in an in-memory SQLite database. The consolidated data will be logged, and a sample of the data will be printed from the database.
+
+## Project Structure
+
+- `elexon_api.py`: Contains the `ElexonAPI` class for interacting with the Elexon API and fetching data. It also includes data processing strategies for temperature, generation, and demand data, implemented using the Strategy pattern.
+- `ingest_data.py`: The main script that uses the `ElexonAPI` class to fetch data, process it using the appropriate strategy, and store it in a SQLite database.
+
+## Logging
+
+The project uses logging to capture relevant information during the data ingestion process. The log messages are written to a file named `elexon.log`.
+
+## Licence
+
+This project is licensed under the [MIT Licence](https://github.com/stephen-a-nicholson/elexon-data-ingest/blob/main/LICENCE).
